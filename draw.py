@@ -3,12 +3,14 @@
 
 A newspaper front-page collage, 1024x1024, drawn entirely with PIL
 shapes and text. Fully deterministic: no randomness, no timestamps,
-no network, no file reads beyond the system fonts. The output PNG is
+no network, no file reads beyond the vendored fonts in fonts/ (with
+the system DejaVu directory as a fallback). The output PNG is
 byte-identical on every run.
 """
 
 import math
 import os
+from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -35,12 +37,34 @@ TAN = (217, 164, 65)
 NIGHT = (13, 27, 62)
 ORANGE = (230, 126, 34)
 
-FONT_BOLD = "/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf"
-FONT_REG = "/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf"
+FONT_BOLD = "DejaVuSans-Bold.ttf"
+FONT_REG = "DejaVuSans.ttf"
+
+# Font search order: the vendored copies in fonts/ beside this script
+# first, then the host system's DejaVu directory as a fallback.
+_FONT_DIRS = (
+    Path(__file__).resolve().parent / "fonts",
+    Path("/usr/share/fonts/truetype/dejavu"),
+)
 
 
-def load_font(path, size):
-    return ImageFont.truetype(path, size)
+def load_font(name, size):
+    """Load a DejaVu font of `size`; never raises.
+
+    Tries the vendored copy in fonts/ beside this script first, then
+    the system DejaVu directory, and finally PIL's built-in default
+    font as a last resort. The picture is identical whenever a DejaVu
+    copy is found; the default font only keeps the program alive in
+    a sandbox with no fonts at all.
+    """
+    for directory in _FONT_DIRS:
+        path = directory / name
+        try:
+            if path.is_file():
+                return ImageFont.truetype(str(path), size)
+        except Exception:
+            continue
+    return ImageFont.load_default()
 
 
 def wrap_text(d, text, font, max_w):
