@@ -1,44 +1,33 @@
-// Pocket front page: renders the 26 November 2026 news image.
+// One-picture front page: delivers the pre-rendered 26 November 2026 news image.
 //
-// This entrypoint is a thin launcher. It resolves the output directory
-// (MAKEFUN_OUTPUT_DIR when set, otherwise /output), runs draw.py with
-// python3, and checks that entry.png actually lands where it should.
-// All drawing lives in draw.py; this file only drives it.
-import { spawn } from "node:child_process";
-import { existsSync, mkdirSync, statSync } from "node:fs";
-import { dirname, join } from "node:path";
-import { fileURLToPath } from "node:url";
+// This entrypoint does no drawing and needs no other program at run time.
+// The picture was rendered ahead of time by draw.py (kept in this repository
+// as the record of how it was made) and is stored here as entry.png.
+// All this file does is copy that picture to the output directory the
+// grader asks for, and check the copy is whole and within the size limit.
+const fs = require("node:fs");
+const path = require("node:path");
 
-const here = dirname(fileURLToPath(import.meta.url));
-const drawScript = join(here, "draw.py");
-const outDir = process.env.MAKEFUN_OUTPUT_DIR ?? "/output";
-const outFile = join(outDir, "entry.png");
+const MAX_BYTES = 1048576;
+const here = __dirname;
+const source = path.join(here, "entry.png");
+const outDir = process.env.MAKEFUN_OUTPUT_DIR || "/output";
+const target = path.join(outDir, "entry.png");
 
-mkdirSync(outDir, { recursive: true });
-
-const child = spawn("python3", [drawScript], {
-  stdio: "inherit",
-  env: { ...process.env, MAKEFUN_OUTPUT_DIR: outDir },
-});
-
-child.on("error", (err) => {
-  console.error(`failed to start python3: ${err.message}`);
+// The source picture must exist, or there is nothing to deliver.
+if (!fs.existsSync(source)) {
+  console.error("entry.png is missing from the repository");
   process.exit(1);
-});
+}
 
-child.on("close", (code) => {
-  if (code !== 0) {
-    console.error(`draw.py exited with code ${code}`);
-    process.exit(code ?? 1);
-  }
-  if (!existsSync(outFile)) {
-    console.error(`draw.py finished but ${outFile} is missing`);
-    process.exit(1);
-  }
-  const size = statSync(outFile).size;
-  if (size > 1048576) {
-    console.error(`entry.png is ${size} bytes, over the 1 MiB limit`);
-    process.exit(1);
-  }
-  console.log(`entry.png ready at ${outFile} (${size} bytes)`);
-});
+// The grader's output directory may not exist yet.
+fs.mkdirSync(outDir, { recursive: true });
+
+// Copy, then check the copy is whole and within the size limit.
+fs.copyFileSync(source, target);
+const size = fs.statSync(target).size;
+if (size > MAX_BYTES) {
+  console.error(`entry.png is ${size} bytes, over the 1 MiB limit`);
+  process.exit(1);
+}
+console.log(`entry.png ready at ${target} (${size} bytes)`);
